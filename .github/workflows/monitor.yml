@@ -8,8 +8,6 @@ on:
 permissions:
   contents: read
   issues: write
-  pages: write
-  id-token: write
 
 env:
   PYTHONUNBUFFERED: "1"
@@ -22,15 +20,12 @@ concurrency:
 jobs:
   monitor:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Restore durable monitor state
         run: |
-          mkdir -p build site
+          mkdir -p build
           gh issue view "${{ vars.GUARDIAN_STATE_ISSUE }}" \
             --repo "${{ github.repository }}" --json body --jq .body > build/state.json
           python -m json.tool build/state.json >/dev/null
@@ -42,8 +37,8 @@ jobs:
         run: |
           python -m agent_tech_guardian \
             --state-file build/state.json \
-            --status-page site/index.html \
-            --status-json site/status.json
+            --status-page build/status.html \
+            --status-json build/status.json
 
       - name: Persist incident state
         if: always()
@@ -53,28 +48,16 @@ jobs:
               --repo "${{ github.repository }}" --body-file build/state.json
           fi
 
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload status page
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-
-      - name: Deploy status page
-        id: deployment
-        uses: actions/deploy-pages@v4
-
       - name: Publish run summary
         if: always()
         run: |
-          if test -f site/status.json; then
+          if test -f build/status.json; then
             python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
           import json
-          data=json.load(open('site/status.json'))
+          data=json.load(open('build/status.json'))
           print(f"## Agent Tech Guardian: {data['overall'].title()}")
           print(f"Checked: {data['checked_at']}")
-          for name, row in data['systems'].items():
+          for row in data['systems'].values():
               print(f"- {row['display_name']}: {row['state']}")
           PY
           fi
