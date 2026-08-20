@@ -19,9 +19,19 @@ Guardian runs outside the monitored applications and validates real public launc
 - One recovery message after a previously alerted incident
 - Sanitized public status output
 - No automatic restarts or production writes
+- A secondary zero-LLM heartbeat alarm if the external monitor stops updating
 
 See [`docs/CONTRACT.md`](docs/CONTRACT.md) for the exact acceptance contract.
 
 ## Status
 
-The production status page is published by the scheduled Guardian workflow after deployment.
+The production status page is published at
+https://eden-tdg.github.io/agent-tech-guardian/ and reads the latest durable
+monitor state without redeploying every five minutes.
+
+## Monitor-of-monitor
+
+`hermes/agent_tech_guardian_heartbeat.py` runs every 15 minutes as a deterministic
+Hermes script-only cron. Healthy checks produce no output. A stale or unreadable
+external heartbeat produces one alert in `#automation-status`, followed by one
+recovery message when fresh state returns.
