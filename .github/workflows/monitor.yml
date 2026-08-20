@@ -1,0 +1,80 @@
+name: Guardian Monitor
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  pages: write
+  id-token: write
+
+env:
+  PYTHONUNBUFFERED: "1"
+  GH_TOKEN: ${{ github.token }}
+
+concurrency:
+  group: agent-tech-guardian-monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore durable monitor state
+        run: |
+          mkdir -p build site
+          gh issue view "${{ vars.GUARDIAN_STATE_ISSUE }}" \
+            --repo "${{ github.repository }}" --json body --jq .body > build/state.json
+          python -m json.tool build/state.json >/dev/null
+
+      - name: Run read-only agent journeys
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_CHANNEL_ID: ${{ vars.DISCORD_CHANNEL_ID }}
+        run: |
+          python -m agent_tech_guardian \
+            --state-file build/state.json \
+            --status-page site/index.html \
+            --status-json site/status.json
+
+      - name: Persist incident state
+        if: always()
+        run: |
+          if python -m json.tool build/state.json >/dev/null 2>&1; then
+            gh issue edit "${{ vars.GUARDIAN_STATE_ISSUE }}" \
+              --repo "${{ github.repository }}" --body-file build/state.json
+          fi
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload status page
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy status page
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Publish run summary
+        if: always()
+        run: |
+          if test -f site/status.json; then
+            python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          data=json.load(open('site/status.json'))
+          print(f"## Agent Tech Guardian: {data['overall'].title()}")
+          print(f"Checked: {data['checked_at']}")
+          for name, row in data['systems'].items():
+              print(f"- {row['display_name']}: {row['state']}")
+          PY
+          fi
