@@ -32,3 +32,11 @@ def test_monitor_publishes_sanitized_status_to_dedicated_static_branch():
     assert "build/status.json" in monitor
     assert "git push --force origin" in monitor
     assert '"$state_commit:refs/heads/guardian-state"' in monitor
+
+
+def test_pages_upload_avoids_unpinned_nested_action():
+    pages = (WORKFLOWS / "pages.yml").read_text()
+    assert "actions/upload-pages-artifact" not in pages
+    assert "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02" in pages
+    assert "github-pages.tar" in pages
+    assert "name: github-pages" in pages
