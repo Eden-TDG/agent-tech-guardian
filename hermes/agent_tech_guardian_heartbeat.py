@@ -35,7 +35,30 @@ def parse_utc(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc)
 
 
-def fetch_guardian_state(*, open_url=urllib.request.urlopen) -> dict:
+def _parse_issue_state(issue: dict) -> dict:
+    state = json.loads(issue["body"])
+    if not isinstance(state, dict) or not isinstance(state.get("checked_at"), str):
+        raise ValueError("invalid guardian state")
+    return state
+
+
+def fetch_guardian_state_authenticated(*, runner=subprocess.run) -> dict:
+    """Read issue state through the existing authenticated GitHub CLI session."""
+    completed = runner(
+        ["gh", "api", "repos/Eden-TDG/agent-tech-guardian/issues/1"],
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=True,
+    )
+    return _parse_issue_state(json.loads(completed.stdout))
+
+
+def fetch_guardian_state(
+    *,
+    open_url=urllib.request.urlopen,
+    authenticated_runner=subprocess.run,
+) -> dict:
     request = urllib.request.Request(
         ISSUE_API,
         headers={"Accept": "application/vnd.github+json", "User-Agent": "Agent-Tech-Guardian-Heartbeat/1.0"},
@@ -47,6 +70,8 @@ def fetch_guardian_state(*, open_url=urllib.request.urlopen) -> dict:
                 issue = json.load(response)
             break
         except urllib.error.HTTPError as exc:
+            if exc.code == 403 and str(exc.headers.get("X-RateLimit-Remaining") or "") == "0":
+                return fetch_guardian_state_authenticated(runner=authenticated_runner)
             if attempt == 0 and exc.code in {502, 503, 504}:
                 continue
             raise
@@ -55,10 +80,7 @@ def fetch_guardian_state(*, open_url=urllib.request.urlopen) -> dict:
                 continue
             raise
     assert issue is not None
-    state = json.loads(issue["body"])
-    if not isinstance(state, dict) or not isinstance(state.get("checked_at"), str):
-        raise ValueError("invalid guardian state")
-    return state
+    return _parse_issue_state(issue)
 
 
 def repair_stale_monitor(

@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import urllib.error
 from datetime import datetime, timedelta, timezone
+from email.message import Message
 from pathlib import Path
 
 
@@ -184,3 +186,58 @@ def test_guardian_state_fetch_does_not_retry_invalid_payload():
     else:
         raise AssertionError("invalid payload must fail closed")
     assert calls == [20]
+
+
+def test_guardian_state_fetch_uses_authenticated_fallback_only_when_public_quota_is_exhausted():
+    calls = []
+    expected = state(datetime(2026, 8, 20, tzinfo=timezone.utc))
+
+    def open_url(request, timeout):
+        calls.append(("public", request.full_url, timeout))
+        headers = Message()
+        headers["X-RateLimit-Remaining"] = "0"
+        raise urllib.error.HTTPError(
+            request.full_url,
+            403,
+            "rate limit exceeded",
+            headers,
+            None,
+        )
+
+    def runner(command, **kwargs):
+        calls.append(("authenticated", command, kwargs))
+        return subprocess.CompletedProcess(command, 0, json.dumps({"body": json.dumps(expected)}), "")
+
+    result = module.fetch_guardian_state(open_url=open_url, authenticated_runner=runner)
+
+    assert result == expected
+    assert calls[1][1] == [
+        "gh", "api", "repos/Eden-TDG/agent-tech-guardian/issues/1",
+    ]
+    assert calls[1][2]["check"] is True
+
+
+def test_guardian_state_fetch_does_not_fallback_on_permission_403():
+    fallback_calls = []
+
+    def open_url(request, timeout):
+        headers = Message()
+        headers["X-RateLimit-Remaining"] = "42"
+        raise urllib.error.HTTPError(
+            request.full_url,
+            403,
+            "forbidden",
+            headers,
+            None,
+        )
+
+    try:
+        module.fetch_guardian_state(
+            open_url=open_url,
+            authenticated_runner=lambda *_args, **_kwargs: fallback_calls.append(True),
+        )
+    except urllib.error.HTTPError as exc:
+        assert exc.code == 403
+    else:
+        raise AssertionError("permission failures must remain fail-closed")
+    assert fallback_calls == []

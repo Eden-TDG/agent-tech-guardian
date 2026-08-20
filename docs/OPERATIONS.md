@@ -28,6 +28,7 @@
 6. A previously alerted incident sends one recovery message after the full journey passes.
 7. The status page fails visibly closed when state is older than 15 minutes or cannot be read.
 8. The secondary heartbeat checks every 15 minutes. When external state is stale, it dispatches the GitHub workflow once for that exact stale timestamp, waits for `checked_at` to advance, and remains silent if the repair succeeds. It alerts once only when dispatch/verification is exhausted or the state is unreadable, then once on recovery.
+9. The heartbeat reads the public issue API first. Only a definitive anonymous GitHub quota exhaustion (`403` with `X-RateLimit-Remaining: 0`) may fall back to the existing authenticated `gh` session; permission failures, malformed state, and unrelated HTTP errors remain fail-closed.
 
 ## Exact monitored journeys
 

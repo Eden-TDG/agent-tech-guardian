@@ -61,6 +61,8 @@ The static status page shows:
   minutes. For stale state it performs one bounded GitHub workflow dispatch per
   stale timestamp and verifies `checked_at` advancement before alerting; unreadable
   state remains fail-closed. It alerts once after exhausted repair, then once on recovery.
+- A definitive anonymous GitHub API quota exhaustion may use the local authenticated
+  GitHub CLI only to read the same issue state. Other 403s and invalid payloads do not fall back.
 
 ## Explicit non-goals for v1
 
