@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,13 +29,26 @@ def parse_utc(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc)
 
 
-def fetch_guardian_state() -> dict:
+def fetch_guardian_state(*, open_url=urllib.request.urlopen) -> dict:
     request = urllib.request.Request(
         ISSUE_API,
         headers={"Accept": "application/vnd.github+json", "User-Agent": "Agent-Tech-Guardian-Heartbeat/1.0"},
     )
-    with urllib.request.urlopen(request, timeout=20) as response:
-        issue = json.load(response)
+    issue = None
+    for attempt in range(2):
+        try:
+            with open_url(request, timeout=20) as response:
+                issue = json.load(response)
+            break
+        except urllib.error.HTTPError as exc:
+            if attempt == 0 and exc.code in {502, 503, 504}:
+                continue
+            raise
+        except (TimeoutError, urllib.error.URLError):
+            if attempt == 0:
+                continue
+            raise
+    assert issue is not None
     state = json.loads(issue["body"])
     if not isinstance(state, dict) or not isinstance(state.get("checked_at"), str):
         raise ValueError("invalid guardian state")

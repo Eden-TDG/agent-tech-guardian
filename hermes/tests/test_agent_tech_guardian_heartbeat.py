@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import urllib.error
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -52,3 +53,48 @@ def test_fetch_failure_is_sanitized_and_deduplicated(tmp_path, capsys):
     output = capsys.readouterr().out
     assert "could not be read" in output
     assert "secret-token-value" not in output
+
+
+class FakeHTTPResponse:
+    def __init__(self, body: dict):
+        self.body = body
+
+    def read(self):
+        return json.dumps(self.body)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+
+def test_guardian_state_fetch_retries_one_transport_timeout():
+    calls = []
+    issue = {"body": json.dumps(state(datetime(2026, 8, 20, tzinfo=timezone.utc)))}
+
+    def open_url(_request, timeout):
+        calls.append(timeout)
+        if len(calls) == 1:
+            raise TimeoutError("temporary")
+        return FakeHTTPResponse(issue)
+
+    result = module.fetch_guardian_state(open_url=open_url)
+    assert result["overall"] == "operational"
+    assert calls == [20, 20]
+
+
+def test_guardian_state_fetch_does_not_retry_invalid_payload():
+    calls = []
+
+    def open_url(_request, timeout):
+        calls.append(timeout)
+        return FakeHTTPResponse({"body": "not-json"})
+
+    try:
+        module.fetch_guardian_state(open_url=open_url)
+    except json.JSONDecodeError:
+        pass
+    else:
+        raise AssertionError("invalid payload must fail closed")
+    assert calls == [20]

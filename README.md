@@ -22,6 +22,9 @@ Guardian runs outside the monitored applications and validates real public launc
 - A secondary zero-LLM heartbeat alarm if the external monitor stops updating
 
 See [`docs/CONTRACT.md`](docs/CONTRACT.md) for the exact acceptance contract.
+Operational recovery and release procedures are in
+[`docs/OPERATIONS.md`](docs/OPERATIONS.md) and
+[`docs/RELEASE_CHECKLIST.md`](docs/RELEASE_CHECKLIST.md).
 
 ## Status
 
@@ -31,7 +34,7 @@ monitor state without redeploying every five minutes.
 
 ## Monitor-of-monitor
 
-`hermes/agent_tech_guardian_heartbeat.py` runs every 15 minutes as a deterministic
+`hermes/agent_tech_guardian_heartbeat.py` runs every five minutes as a deterministic
 Hermes script-only cron. Healthy checks produce no output. A stale or unreadable
 external heartbeat produces one alert in `#automation-status`, followed by one
 recovery message when fresh state returns.

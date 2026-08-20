@@ -57,7 +57,7 @@ The static status page shows:
 - Deterministic GitHub Actions schedule every five minutes.
 - Manual workflow dispatch for controlled verification.
 - No LLM calls.
-- A separate deterministic Hermes heartbeat checks the external state every 15
+- A separate deterministic Hermes heartbeat checks the external state every five
   minutes and alerts once if it is stale or unreadable, then once on recovery.
 
 ## Explicit non-goals for v1

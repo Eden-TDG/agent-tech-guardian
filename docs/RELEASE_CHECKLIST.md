@@ -1,0 +1,21 @@
+# Release Checklist
+
+- [ ] Exact scope and monitored journey contracts unchanged or intentionally versioned
+- [ ] Focused RED witnessed for behavior changes
+- [ ] Full `pytest` suite passes
+- [ ] `compileall` covers `agent_tech_guardian`, `hermes`, and `tests`
+- [ ] Workflow YAML parses
+- [ ] Every external GitHub Action is pinned to a full commit SHA
+- [ ] `git diff --check` passes
+- [ ] Current tree and full Git history pass redacted Gitleaks scans
+- [ ] No monitored application mutation, credential, cookie, HTML dump, or customer data added
+- [ ] Fresh recovery clone passes integrity, tests, compile, and secret scans
+- [ ] Local HEAD equals `origin/main` after publication
+- [ ] CI succeeds on the exact released SHA
+- [ ] Status page deployment succeeds when public assets change
+- [ ] Manual Guardian run succeeds and durable `checked_at` advances
+- [ ] Public page live DOM reports fresh state or visibly fails closed
+- [ ] Heartbeat source matches the tracked artifact byte-for-byte
+- [ ] Persisted heartbeat cron is enabled, script-only, `no_agent: true`, every five minutes, and policy-compliant
+- [ ] Healthy heartbeat execution is silent
+- [ ] No service restart performed without explicit approval
