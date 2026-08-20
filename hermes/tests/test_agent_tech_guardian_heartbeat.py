@@ -28,17 +28,26 @@ def test_stale_heartbeat_alerts_once_then_deduplicates(tmp_path, capsys):
     now = datetime(2026, 8, 20, 15, 0, tzinfo=timezone.utc)
     path = tmp_path / "state.json"
     stale = lambda: state(now - timedelta(minutes=20))
-    module.run_once(now=now, state_path=path, fetch=stale)
+    recoveries = []
+    repair = lambda checked_at, _fetch: recoveries.append(checked_at) or None
+    module.run_once(now=now, state_path=path, fetch=stale, repair=repair)
     first = capsys.readouterr().out
     assert "Agent Tech Guardian heartbeat is stale" in first
-    module.run_once(now=now + timedelta(minutes=5), state_path=path, fetch=stale)
+    module.run_once(now=now + timedelta(minutes=5), state_path=path, fetch=stale, repair=repair)
     assert capsys.readouterr().out == ""
+    assert len(recoveries) == 1
 
 
 def test_recovery_message_emits_once(tmp_path, capsys):
     now = datetime(2026, 8, 20, 15, 0, tzinfo=timezone.utc)
     path = tmp_path / "state.json"
-    module.run_once(now=now, state_path=path, fetch=lambda: state(now - timedelta(minutes=20)))
+    no_repair = lambda _checked_at, _fetch: None
+    module.run_once(
+        now=now,
+        state_path=path,
+        fetch=lambda: state(now - timedelta(minutes=20)),
+        repair=no_repair,
+    )
     capsys.readouterr()
     module.run_once(now=now, state_path=path, fetch=lambda: state(now))
     assert "heartbeat recovered" in capsys.readouterr().out
@@ -53,6 +62,83 @@ def test_fetch_failure_is_sanitized_and_deduplicated(tmp_path, capsys):
     output = capsys.readouterr().out
     assert "could not be read" in output
     assert "secret-token-value" not in output
+
+
+def test_stale_heartbeat_dispatches_once_and_stays_silent_when_repair_advances_state(tmp_path, capsys):
+    now = datetime(2026, 8, 20, 15, 0, tzinfo=timezone.utc)
+    stale_state = state(now - timedelta(minutes=20))
+    calls = []
+
+    def repair(checked_at, fetch):
+        calls.append((checked_at, fetch()))
+        return state(now)
+
+    path = tmp_path / "state.json"
+    module.run_once(now=now, state_path=path, fetch=lambda: stale_state, repair=repair)
+
+    assert capsys.readouterr().out == ""
+    assert calls == [(stale_state["checked_at"], stale_state)]
+    assert json.loads(path.read_text())["unhealthy"] is False
+
+
+def test_alerted_stale_heartbeat_emits_recovery_when_dispatch_repairs_it(tmp_path, capsys):
+    now = datetime(2026, 8, 20, 15, 0, tzinfo=timezone.utc)
+    path = tmp_path / "state.json"
+    path.write_text(json.dumps({"unhealthy": True, "reason": "stale"}))
+
+    module.run_once(
+        now=now,
+        state_path=path,
+        fetch=lambda: state(now - timedelta(minutes=20)),
+        repair=lambda _checked_at, _fetch: state(now),
+    )
+
+    assert "heartbeat recovered" in capsys.readouterr().out
+
+
+def test_unreadable_heartbeat_does_not_dispatch_monitor(tmp_path, capsys):
+    calls = []
+
+    def broken():
+        raise RuntimeError("unavailable")
+
+    module.run_once(
+        now=datetime(2026, 8, 20, tzinfo=timezone.utc),
+        state_path=tmp_path / "state.json",
+        fetch=broken,
+        repair=lambda *_args: calls.append(True),
+    )
+
+    assert calls == []
+    assert "could not be read" in capsys.readouterr().out
+
+
+def test_repair_dispatches_exact_workflow_and_requires_checked_at_to_advance():
+    stale = "2026-08-20T15:00:00Z"
+    advanced = state(datetime(2026, 8, 20, 15, 20, tzinfo=timezone.utc))
+    fetched = iter([{"checked_at": stale}, advanced])
+    commands = []
+    sleeps = []
+
+    def runner(command, **kwargs):
+        commands.append((command, kwargs))
+
+    result = module.repair_stale_monitor(
+        stale,
+        lambda: next(fetched),
+        runner=runner,
+        sleep=lambda seconds: sleeps.append(seconds),
+        poll_attempts=2,
+    )
+
+    assert result == advanced
+    assert commands[0][0] == [
+        "gh", "workflow", "run", "monitor.yml",
+        "--repo", "Eden-TDG/agent-tech-guardian",
+        "--ref", "main",
+    ]
+    assert commands[0][1]["check"] is True
+    assert sleeps == [5, 5]
 
 
 class FakeHTTPResponse:

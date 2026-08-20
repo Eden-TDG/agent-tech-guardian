@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import tempfile
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
@@ -19,6 +21,10 @@ from typing import Callable
 ISSUE_API = "https://api.github.com/repos/Eden-TDG/agent-tech-guardian/issues/1"
 DEFAULT_STATE = Path.home() / ".hermes/state/agent-tech-guardian-heartbeat.json"
 STALE_AFTER_SECONDS = 15 * 60
+GUARDIAN_REPOSITORY = "Eden-TDG/agent-tech-guardian"
+GUARDIAN_WORKFLOW = "monitor.yml"
+REPAIR_POLL_ATTEMPTS = 18
+REPAIR_POLL_SECONDS = 5
 
 
 def utc_now() -> datetime:
@@ -55,6 +61,34 @@ def fetch_guardian_state(*, open_url=urllib.request.urlopen) -> dict:
     return state
 
 
+def repair_stale_monitor(
+    stale_checked_at: str,
+    fetch: Callable[[], dict],
+    *,
+    runner=subprocess.run,
+    sleep=time.sleep,
+    poll_attempts: int = REPAIR_POLL_ATTEMPTS,
+) -> dict | None:
+    """Dispatch one external monitor run and require its heartbeat to advance."""
+    runner(
+        [
+            "gh", "workflow", "run", GUARDIAN_WORKFLOW,
+            "--repo", GUARDIAN_REPOSITORY,
+            "--ref", "main",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=True,
+    )
+    for _ in range(poll_attempts):
+        sleep(REPAIR_POLL_SECONDS)
+        candidate = fetch()
+        if str(candidate.get("checked_at") or "") != stale_checked_at:
+            return candidate
+    return None
+
+
 def load_local(path: Path) -> dict:
     try:
         value = json.loads(path.read_text())
@@ -78,7 +112,13 @@ def save_local(path: Path, value: dict) -> None:
             pass
 
 
-def run_once(*, now: datetime | None = None, state_path: Path = DEFAULT_STATE, fetch: Callable[[], dict] = fetch_guardian_state) -> None:
+def run_once(
+    *,
+    now: datetime | None = None,
+    state_path: Path = DEFAULT_STATE,
+    fetch: Callable[[], dict] = fetch_guardian_state,
+    repair: Callable[[str, Callable[[], dict]], dict | None] = repair_stale_monitor,
+) -> None:
     now = (now or utc_now()).astimezone(timezone.utc)
     previous = load_local(state_path)
     unhealthy_reason = ""
@@ -93,6 +133,22 @@ def run_once(*, now: datetime | None = None, state_path: Path = DEFAULT_STATE, f
         unhealthy_reason = "unreadable"
 
     was_unhealthy = bool(previous.get("unhealthy"))
+    repair_attempted_checked_at = str(previous.get("repair_attempted_checked_at") or "")
+    if unhealthy_reason == "stale" and repair_attempted_checked_at != checked_at:
+        repair_attempted_checked_at = checked_at
+        try:
+            repaired = repair(checked_at, fetch)
+            if repaired is not None:
+                repaired_checked_at = str(repaired["checked_at"])
+                repaired_age = (now - parse_utc(repaired_checked_at)).total_seconds()
+                if repaired_age <= STALE_AFTER_SECONDS:
+                    checked_at = repaired_checked_at
+                    unhealthy_reason = ""
+                    repair_attempted_checked_at = ""
+        except Exception:
+            # Preserve the original stale classification. The alert remains
+            # sanitized; command output and credentials are never printed.
+            pass
     is_unhealthy = bool(unhealthy_reason)
     if is_unhealthy and not was_unhealthy:
         if unhealthy_reason == "stale":
@@ -111,7 +167,12 @@ def run_once(*, now: datetime | None = None, state_path: Path = DEFAULT_STATE, f
             "✅ Agent Tech Guardian heartbeat recovered. "
             f"The external monitor is updating again (last check {checked_at})."
         )
-    save_local(state_path, {"unhealthy": is_unhealthy, "reason": unhealthy_reason, "checked_at": checked_at})
+    save_local(state_path, {
+        "unhealthy": is_unhealthy,
+        "reason": unhealthy_reason,
+        "checked_at": checked_at,
+        "repair_attempted_checked_at": repair_attempted_checked_at if is_unhealthy else "",
+    })
 
 
 if __name__ == "__main__":

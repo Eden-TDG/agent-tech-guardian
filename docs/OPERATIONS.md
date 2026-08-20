@@ -20,14 +20,14 @@
 
 ## Normal operating contract
 
-1. GitHub runs the monitor every five minutes.
+1. GitHub runs the monitor every five minutes on an offset schedule to avoid the busiest top-of-hour scheduler boundary.
 2. One bounded retry absorbs a transient network, 502, 503, or 504 failure.
 3. The first completed failed run persists a degraded state but sends no incident alert.
 4. A second run with the same stable `system:stage:reason` signature sends one Discord alert.
 5. Unchanged incidents remain silent.
 6. A previously alerted incident sends one recovery message after the full journey passes.
 7. The status page fails visibly closed when state is older than 15 minutes or cannot be read.
-8. The secondary heartbeat checks every five minutes and alerts once when state is older than 15 minutes or unreadable, then once on recovery.
+8. The secondary heartbeat checks every 15 minutes. When external state is stale, it dispatches the GitHub workflow once for that exact stale timestamp, waits for `checked_at` to advance, and remains silent if the repair succeeds. It alerts once only when dispatch/verification is exhausted or the state is unreadable, then once on recovery.
 
 ## Exact monitored journeys
 
@@ -52,8 +52,8 @@ A generic 2xx/3xx result is not sufficient.
 ### Heartbeat stale/unreadable alert arrives
 
 1. Inspect whether the latest `Guardian Monitor` workflow is scheduled, queued, failed, or disabled.
-2. Confirm GitHub Actions is enabled and the workflow still contains `cron: "*/5 * * * *"`.
-3. Manually dispatch the workflow once if GitHub is available.
+2. Confirm GitHub Actions is enabled and the workflow still contains the five-minute offset schedule.
+3. Inspect whether the heartbeat already attempted its one bounded workflow dispatch for that stale timestamp; manually dispatch only when it did not or when testing an approved code change.
 4. Require a successful run, advancing `checked_at`, a fresh operational/degraded page, and one heartbeat recovery.
 5. If a public-repository inactivity policy disabled schedules, re-enable the workflow; do not manufacture green state manually.
 

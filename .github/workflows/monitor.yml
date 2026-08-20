@@ -2,7 +2,8 @@ name: Guardian Monitor
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    # Offset from the busiest top-of-hour GitHub scheduler boundary.
+    - cron: "3-59/5 * * * *"
   workflow_dispatch:
 
 permissions:
