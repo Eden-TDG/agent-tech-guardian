@@ -21,7 +21,14 @@ def test_ci_compiles_every_shipped_python_tree():
 def test_monitor_workflow_has_minimum_explicit_permissions():
     monitor = (WORKFLOWS / "monitor.yml").read_text()
     permissions = monitor.split("permissions:", 1)[1].split("env:", 1)[0]
-    assert "contents: read" in permissions
+    assert "contents: write" in permissions
     assert "issues: write" in permissions
     assert "actions: write" not in permissions
-    assert "contents: write" not in permissions
+
+
+def test_monitor_publishes_sanitized_status_to_dedicated_static_branch():
+    monitor = (WORKFLOWS / "monitor.yml").read_text()
+    assert "guardian-state" in monitor
+    assert "build/status.json" in monitor
+    assert "git push --force origin" in monitor
+    assert '"$state_commit:refs/heads/guardian-state"' in monitor

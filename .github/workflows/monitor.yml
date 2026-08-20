@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   issues: write
 
 env:
@@ -47,6 +47,18 @@ jobs:
           if python -m json.tool build/state.json >/dev/null 2>&1; then
             gh issue edit "${{ vars.GUARDIAN_STATE_ISSUE }}" \
               --repo "${{ github.repository }}" --body-file build/state.json
+          fi
+
+      - name: Publish public monitor state
+        if: always()
+        run: |
+          if python -m json.tool build/status.json >/dev/null 2>&1; then
+            git config user.name "Agent Tech Guardian"
+            git config user.email "guardian@users.noreply.github.com"
+            status_blob="$(git hash-object -w build/status.json)"
+            state_tree="$(printf '100644 blob %s\tstatus.json\n' "$status_blob" | git mktree)"
+            state_commit="$(printf 'Publish Guardian status\n' | git commit-tree "$state_tree")"
+            git push --force origin "$state_commit:refs/heads/guardian-state"
           fi
 
       - name: Publish run summary
