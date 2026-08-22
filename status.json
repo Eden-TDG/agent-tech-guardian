@@ -1,0 +1,38 @@
+{
+  "checked_at": "2026-08-22T18:47:07Z",
+  "overall": "operational",
+  "systems": {
+    "jet_center": {
+      "diagnostic": "",
+      "display_name": "Jet Center",
+      "last_successful_journey": "2026-08-22T18:47:07Z",
+      "reason": null,
+      "stage": null,
+      "state": "operational"
+    },
+    "jetai": {
+      "diagnostic": "",
+      "display_name": "JetAI",
+      "last_successful_journey": "2026-08-22T18:47:07Z",
+      "reason": null,
+      "stage": null,
+      "state": "operational"
+    },
+    "matchmaker": {
+      "diagnostic": "",
+      "display_name": "MatchMaker",
+      "last_successful_journey": "2026-08-22T18:47:07Z",
+      "reason": null,
+      "stage": null,
+      "state": "operational"
+    },
+    "renee_todo": {
+      "diagnostic": "",
+      "display_name": "Renee TO-DO",
+      "last_successful_journey": "2026-08-22T18:47:07Z",
+      "reason": null,
+      "stage": null,
+      "state": "operational"
+    }
+  }
+}
