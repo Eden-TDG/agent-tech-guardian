@@ -10,6 +10,8 @@ from typing import Any, Callable
 
 TRANSIENT_STATUSES = {502, 503, 504}
 EXPECTED_MATCHMAKER_REDIRECT = "https://app.getjetai.com/launch/matchmaker"
+OFFERS_OUT_HEARTBEAT_URL = "https://api.github.com/repos/Eden-TDG/agent-tech-guardian/issues/8"
+OFFERS_OUT_HEARTBEAT_MAX_AGE_SECONDS = 15 * 60
 
 
 @dataclass(frozen=True)
@@ -116,6 +118,48 @@ class Monitor:
         r = self._get("renee_todo", "api_data", base + "/api/data")
         self._expect_json("renee_todo", "api_data", r, lambda p: isinstance(p, dict))
 
+    def _probe_offers_out(self) -> None:
+        response = self._get("offers_out", "mac_heartbeat", OFFERS_OUT_HEARTBEAT_URL)
+        self._expect_status("offers_out", "mac_heartbeat", response)
+        payload: dict[str, Any] = {}
+        observed_at: datetime | None = None
+        try:
+            issue = response.json()
+            payload = json.loads(issue["body"])
+            observed_at = datetime.fromisoformat(
+                str(payload["observed_at"]).replace("Z", "+00:00")
+            ).astimezone(timezone.utc)
+            datetime.fromisoformat(
+                str(payload["poller_last_run_at"]).replace("Z", "+00:00")
+            ).astimezone(timezone.utc)
+            valid = (
+                set(payload) == {
+                    "schema_version", "producer_id", "observed_at",
+                    "poller_last_run_at", "poller_enabled",
+                }
+                and payload["schema_version"] == 1
+                and payload["producer_id"] == "offers-out-mac-poller"
+                and isinstance(payload["poller_enabled"], bool)
+            )
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+            valid = False
+        if not valid or observed_at is None:
+            raise ProbeFailure(
+                "offers_out", "mac_heartbeat", "unexpected_payload",
+                _safe_diagnostic("unexpected_payload"),
+            )
+        if not payload["poller_enabled"]:
+            raise ProbeFailure(
+                "offers_out", "mac_heartbeat", "poller_disabled",
+                "production poller is disabled",
+            )
+        age_seconds = (self.clock.now().astimezone(timezone.utc) - observed_at).total_seconds()
+        if age_seconds < 0 or age_seconds > OFFERS_OUT_HEARTBEAT_MAX_AGE_SECONDS:
+            raise ProbeFailure(
+                "offers_out", "mac_heartbeat", "heartbeat_stale",
+                "sanitized Mac poller heartbeat is stale",
+            )
+
     def run(self) -> dict[str, Any]:
         checked_at = _iso(self.clock.now())
         previous = self.state_store.load()
@@ -126,6 +170,7 @@ class Monitor:
             ("matchmaker", "MatchMaker", self._probe_matchmaker),
             ("jet_center", "Jet Center", self._probe_jet_center),
             ("renee_todo", "Renee TO-DO", self._probe_renee_todo),
+            ("offers_out", "Offers Out", self._probe_offers_out),
         )
         systems: dict[str, dict[str, Any]] = {}
         for key, display_name, probe in definitions:

@@ -122,6 +122,15 @@ def all_healthy_script() -> dict[tuple[str, bool], list[FakeResponse]]:
         ("https://ops.reneedelia.com/api/data", True): [
             FakeResponse(200, '{"todo":[]}')
         ],
+        ("https://api.github.com/repos/Eden-TDG/agent-tech-guardian/issues/8", True): [
+            FakeResponse(200, json.dumps({"body": json.dumps({
+                "schema_version": 1,
+                "producer_id": "offers-out-mac-poller",
+                "observed_at": "2026-08-20T11:58:00Z",
+                "poller_last_run_at": "2026-08-20T11:57:00Z",
+                "poller_enabled": True,
+            })}))
+        ],
     }
 
 
