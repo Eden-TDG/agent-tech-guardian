@@ -14,14 +14,14 @@ def system(report, name: str):
     return report["systems"][name]
 
 
-def test_all_four_system_journeys_are_operational(all_healthy_script):
+def test_all_five_system_journeys_are_operational(all_healthy_script):
     report, transport, state, notifier = run_monitor(all_healthy_script)
 
     assert report["overall"] == "operational"
-    assert set(report["systems"]) == {"jetai", "matchmaker", "jet_center", "renee_todo"}
+    assert set(report["systems"]) == {"jetai", "matchmaker", "jet_center", "renee_todo", "offers_out"}
     assert {entry["state"] for entry in report["systems"].values()} == {"operational"}
     assert report["checked_at"] == "2026-08-20T12:00:00Z"
-    assert len(transport.calls) == 8
+    assert len(transport.calls) == 9
     assert notifier.events == []
     assert len(state.saves) == 1
     json.dumps(state.value)
@@ -61,6 +61,7 @@ def test_all_system_failures_make_overall_outage(all_healthy_script):
         ("https://matchmakerre.com/api/health", True),
         ("https://web-production-1adf7.up.railway.app/health", True),
         ("https://ops.reneedelia.com/", True),
+        ("https://api.github.com/repos/Eden-TDG/agent-tech-guardian/issues/8", True),
     ):
         script[key] = [FakeResponse(500, "failed")]
 
@@ -68,6 +69,68 @@ def test_all_system_failures_make_overall_outage(all_healthy_script):
 
     assert report["overall"] == "outage"
     assert {entry["state"] for entry in report["systems"].values()} == {"outage"}
+
+
+def test_offers_out_stale_heartbeat_has_stable_sanitized_alert_signature(all_healthy_script):
+    script = copy.deepcopy(all_healthy_script)
+    url = "https://api.github.com/repos/Eden-TDG/agent-tech-guardian/issues/8"
+    stale = {
+        "schema_version": 1,
+        "producer_id": "offers-out-mac-poller",
+        "observed_at": "2026-08-20T11:30:00Z",
+        "poller_last_run_at": "2026-08-20T11:29:00Z",
+        "poller_enabled": True,
+    }
+    script[(url, True)] = [FakeResponse(200, json.dumps({"body": json.dumps(stale)}))]
+
+    report, _, _, _ = run_monitor(script)
+
+    assert system(report, "offers_out") == {
+        "display_name": "Offers Out",
+        "state": "outage",
+        "stage": "mac_heartbeat",
+        "reason": "heartbeat_stale",
+        "diagnostic": "sanitized Mac poller heartbeat is stale",
+        "last_successful_journey": None,
+    }
+
+
+def test_synthetic_stale_offers_out_heartbeat_pages_test_notifier_after_two_runs(all_healthy_script):
+    from conftest import FakeClock, FakeNotifier, FakeStateStore
+    from datetime import datetime, timezone
+
+    script = copy.deepcopy(all_healthy_script)
+    url = "https://api.github.com/repos/Eden-TDG/agent-tech-guardian/issues/8"
+    body = json.dumps({
+        "schema_version": 1,
+        "producer_id": "offers-out-mac-poller",
+        "observed_at": "2026-08-20T11:30:00Z",
+        "poller_last_run_at": "2026-08-20T11:29:00Z",
+        "poller_enabled": True,
+    })
+    script[(url, True)] = [FakeResponse(200, json.dumps({"body": body}))]
+    state = FakeStateStore()
+    notifier = FakeNotifier()
+    first, _, state, notifier = run_monitor(script, state=state, notifier=notifier)
+    assert first["systems"]["offers_out"]["reason"] == "heartbeat_stale"
+    assert notifier.events == []
+
+    second_script = copy.deepcopy(all_healthy_script)
+    second_script[(url, True)] = [FakeResponse(200, json.dumps({"body": body}))]
+    run_monitor(
+        second_script,
+        state=state,
+        notifier=notifier,
+        clock=FakeClock(datetime(2026, 8, 20, 12, 5, tzinfo=timezone.utc)),
+    )
+    assert notifier.events == [{
+        "type": "alert",
+        "system": "offers_out",
+        "display_name": "Offers Out",
+        "stage": "mac_heartbeat",
+        "reason": "heartbeat_stale",
+        "signature": {"system": "offers_out", "stage": "mac_heartbeat", "reason": "heartbeat_stale"},
+    }]
 
 
 def test_matchmaker_login_redirect_is_not_followed_and_location_is_exact(all_healthy_script):

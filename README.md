@@ -10,6 +10,7 @@ Guardian runs outside the monitored applications and validates real public launc
 - MatchMaker health and JetAI entitlement handoff
 - Jet Center health and sign-in surface
 - Renee TO-DO UI and data API
+- Offers Out Mac poller freshness through a sanitized GitHub issue heartbeat
 
 ## Incident behavior
 

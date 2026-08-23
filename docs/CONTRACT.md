@@ -30,6 +30,11 @@ Hermes Ops monitors scheduled jobs, APIs, queues, delivery, and local infrastruc
 4. **Renee TO-DO**
    - `GET https://ops.reneedelia.com/` → HTTP 200 and title `Renee's Command Center`.
    - `GET https://ops.reneedelia.com/api/data` → HTTP 200 and a valid JSON object.
+5. **Offers Out**
+   - `GET https://api.github.com/repos/Eden-TDG/agent-tech-guardian/issues/8` → HTTP 200.
+   - The issue body must be the exact PII-free heartbeat schema for producer
+     `offers-out-mac-poller`, show the production poller enabled, and be no more
+     than 15 minutes old. The Guardian remains read-only and never advances the queue.
 
 ## Incident contract
 
