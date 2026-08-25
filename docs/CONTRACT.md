@@ -12,7 +12,7 @@ Hermes Ops monitors scheduled jobs, APIs, queues, delivery, and local infrastruc
 
 - The primary runner is GitHub Actions, outside Hermes, Renee's Mac, Railway-hosted applications, and the MatchMaker host.
 - The repository contains no production credentials.
-- Monitored applications are read-only targets. The off-Mac Guardian never sends forms, creates records, invokes model inference, advances queues, restarts services, or changes application state. The Mac-side Jet Broker producer may invoke only the fixed, non-business synthetic completion defined below; it has no application mutation tools or user data.
+- Monitored applications are read-only targets. The off-Mac Guardian never sends forms, creates records, invokes model inference, advances queues, restarts services, or changes application state. The Mac-side Ask Jet and Jet Broker producers may invoke only the fixed, non-business synthetic completions defined below; they have no application mutation tools or user data.
 - Discord delivery uses an encrypted GitHub Actions secret.
 - Public status output contains system names, state, timestamps, bounded reason codes, and response timing only—no tokens, cookies, query credentials, user identity, HTML dumps, or stack traces.
 
@@ -21,22 +21,27 @@ Hermes Ops monitors scheduled jobs, APIs, queues, delivery, and local infrastruc
 1. **JetAI**
    - `GET https://app.getjetai.com/health` → HTTP 200 JSON `status=healthy`.
    - `GET https://app.getjetai.com/login` → HTTP 200 and title `Sign in to JetAI`.
-2. **Jet Broker**
+2. **Ask Jet**
+   - Authenticated `GET https://edens-imac.tail06fe59.ts.net:8443/askjet/health` requires `status=ok`.
+   - Authenticated `GET /v1/models` requires the dedicated `ask-jet` route.
+   - Authenticated `POST /v1/chat/completions` requires the exact harmless `ASK_JET_SYNTHETIC_OK` marker.
+   - Only three booleans and a timestamp are published to the Guardian issue; no prompt, answer, token, user, conversation, or fulfillment data leaves the Mac.
+3. **Jet Broker**
    - Mac-side deterministic producer verifies `https://broker.getjetai.com/health` is unlocked with a nonempty corpus.
    - Authenticated `GET http://127.0.0.1:18765/health` requires `status=ok`.
    - Authenticated `GET /v1/models` requires the dedicated `brokercompliance` route.
    - Authenticated `POST /v1/chat/completions` requires an exact harmless synthetic marker from the OAuth-backed model.
    - Only four booleans and a timestamp are published to the Guardian issue; no prompt, answer, token, user, or corpus data leaves the Mac.
-3. **MatchMaker**
+4. **MatchMaker**
    - `GET https://matchmakerre.com/api/health` → HTTP 200 JSON `status=healthy`, `database=connected`.
    - No-follow `GET https://matchmakerre.com/login` → HTTP 302 with exact `Location: https://app.getjetai.com/launch/matchmaker`.
-4. **Jet Center**
+5. **Jet Center**
    - `GET https://web-production-1adf7.up.railway.app/health` → HTTP 200 JSON `status=ok`.
    - `GET https://web-production-1adf7.up.railway.app/login` → HTTP 200 and title `Sign In — Jet Center`.
-5. **Renee TO-DO**
+6. **Renee TO-DO**
    - `GET https://ops.reneedelia.com/` → HTTP 200 and title `Renee's Command Center`.
    - `GET https://ops.reneedelia.com/api/data` → HTTP 200 and a valid JSON object.
-6. **Offers Out**
+7. **Offers Out**
    - `GET https://api.github.com/repos/Eden-TDG/agent-tech-guardian/issues/8` → HTTP 200.
    - The issue body must be the exact PII-free heartbeat schema for producer
      `offers-out-mac-poller`, show the production poller enabled, and be no more
@@ -67,7 +72,7 @@ The static status page shows:
 
 - Deterministic GitHub Actions schedule every five minutes, offset from the top-of-hour scheduler boundary.
 - Manual workflow dispatch for controlled verification.
-- The GitHub-hosted Guardian uses no LLM. The separate Mac producer performs one fixed Jet Broker synthetic completion every five minutes and publishes booleans only.
+- The GitHub-hosted Guardian uses no LLM. Separate Mac producers perform one fixed Ask Jet completion and one fixed Jet Broker completion every five minutes and publish booleans only.
 - A separate deterministic Hermes heartbeat checks the external state every 15
   minutes. For stale state it performs one bounded GitHub workflow dispatch per
   stale timestamp and verifies `checked_at` advancement before alerting; unreadable
@@ -81,8 +86,8 @@ The static status page shows:
 - No use of Renee's personal login.
 - No live business mutation.
 - No automatic service restart.
-- No claim that the fixed synthetic completion proves authenticated user-role visibility or substantive answer quality; it proves app/gateway/model-route availability.
+- No claim that the fixed synthetic completions prove authenticated user-role visibility or substantive answer quality; they prove gateway/model-route availability (plus Jet Broker app/corpus readiness).
 
 ## Follow-on release
 
-A separate, minimally entitled Synthetic Agent will cover authenticated role journeys and Chat AI response readiness only after its identity, permissions, zero-write constraints, and credential lifecycle are approved and tested independently.
+A separate, minimally entitled Synthetic Agent will cover authenticated JetAI role journeys (Jet Docs, Training, and MatchMaker handoff) only after its identity, permissions, zero-write constraints, and credential lifecycle are approved and tested independently.

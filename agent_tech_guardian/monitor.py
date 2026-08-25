@@ -14,6 +14,8 @@ OFFERS_OUT_HEARTBEAT_URL = "https://api.github.com/repos/Eden-TDG/agent-tech-gua
 OFFERS_OUT_HEARTBEAT_MAX_AGE_SECONDS = 15 * 60
 JET_BROKER_HEARTBEAT_URL = "https://api.github.com/repos/Eden-TDG/agent-tech-guardian/issues/10"
 JET_BROKER_HEARTBEAT_MAX_AGE_SECONDS = 15 * 60
+ASK_JET_HEARTBEAT_URL = "https://api.github.com/repos/Eden-TDG/agent-tech-guardian/issues/11"
+ASK_JET_HEARTBEAT_MAX_AGE_SECONDS = 15 * 60
 
 
 @dataclass(frozen=True)
@@ -157,6 +159,53 @@ class Monitor:
                     "Jet Broker synthetic journey did not complete",
                 )
 
+    def _probe_ask_jet(self) -> None:
+        response = self._get("ask_jet", "synthetic_heartbeat", ASK_JET_HEARTBEAT_URL)
+        self._expect_status("ask_jet", "synthetic_heartbeat", response)
+        payload: dict[str, Any] = {}
+        try:
+            issue = response.json()
+            payload = json.loads(issue["body"])
+            observed_at = datetime.fromisoformat(
+                str(payload["observed_at"]).replace("Z", "+00:00")
+            ).astimezone(timezone.utc)
+            valid = (
+                set(payload) == {
+                    "schema_version", "producer_id", "observed_at",
+                    "gateway_healthy", "model_advertised", "completion_ok",
+                }
+                and payload["schema_version"] == 1
+                and payload["producer_id"] == "ask-jet-mac-synthetic"
+                and all(
+                    isinstance(payload[field], bool)
+                    for field in ("gateway_healthy", "model_advertised", "completion_ok")
+                )
+            )
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+            valid = False
+            observed_at = None
+        if not valid or observed_at is None:
+            raise ProbeFailure(
+                "ask_jet", "synthetic_heartbeat", "unexpected_payload",
+                _safe_diagnostic("unexpected_payload"),
+            )
+        age_seconds = (self.clock.now().astimezone(timezone.utc) - observed_at).total_seconds()
+        if age_seconds < 0 or age_seconds > ASK_JET_HEARTBEAT_MAX_AGE_SECONDS:
+            raise ProbeFailure(
+                "ask_jet", "synthetic_heartbeat", "heartbeat_stale",
+                "sanitized Ask Jet synthetic heartbeat is stale",
+            )
+        for field, reason in (
+            ("gateway_healthy", "gateway_unhealthy"),
+            ("model_advertised", "model_route_missing"),
+            ("completion_ok", "completion_failed"),
+        ):
+            if not payload[field]:
+                raise ProbeFailure(
+                    "ask_jet", "synthetic_heartbeat", reason,
+                    "Ask Jet synthetic model journey did not complete",
+                )
+
     def _probe_jet_center(self) -> None:
         base = "https://web-production-1adf7.up.railway.app"
         r = self._get("jet_center", "health", base + "/health")
@@ -220,6 +269,7 @@ class Monitor:
         incidents = previous.get("incidents", {}) if isinstance(previous.get("incidents", {}), dict) else {}
         definitions = (
             ("jetai", "JetAI", self._probe_jetai),
+            ("ask_jet", "Ask Jet", self._probe_ask_jet),
             ("jet_broker", "Jet Broker", self._probe_jet_broker),
             ("matchmaker", "MatchMaker", self._probe_matchmaker),
             ("jet_center", "Jet Center", self._probe_jet_center),

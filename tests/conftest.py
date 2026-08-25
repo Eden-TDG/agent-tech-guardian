@@ -142,6 +142,16 @@ def all_healthy_script() -> dict[tuple[str, bool], list[FakeResponse]]:
                 "completion_ok": True,
             })}))
         ],
+        ("https://api.github.com/repos/Eden-TDG/agent-tech-guardian/issues/11", True): [
+            FakeResponse(200, json.dumps({"body": json.dumps({
+                "schema_version": 1,
+                "producer_id": "ask-jet-mac-synthetic",
+                "observed_at": "2026-08-20T11:58:00Z",
+                "gateway_healthy": True,
+                "model_advertised": True,
+                "completion_ok": True,
+            })}))
+        ],
     }
 
 
