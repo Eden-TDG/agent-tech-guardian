@@ -21,6 +21,7 @@ Hermes Ops monitors scheduled jobs, APIs, queues, delivery, and local infrastruc
 1. **JetAI**
    - `GET https://app.getjetai.com/health` → HTTP 200 JSON `status=healthy`.
    - `GET https://app.getjetai.com/login` → HTTP 200 and title `Sign in to JetAI`.
+   - No-follow GETs for `/documents`, `/documents/seller`, `/documents/buyer`, `/documents/general`, `/training`, and `/launch/matchmaker` must each return HTTP 302 to the exact `/login?next=<path>` destination.
 2. **Ask Jet**
    - Authenticated `GET https://edens-imac.tail06fe59.ts.net:8443/askjet/health` requires `status=ok`.
    - Authenticated `GET /v1/models` requires the dedicated `ask-jet` route.

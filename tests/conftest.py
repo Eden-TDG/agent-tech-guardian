@@ -104,6 +104,15 @@ def all_healthy_script() -> dict[tuple[str, bool], list[FakeResponse]]:
         ("https://app.getjetai.com/login", True): [
             FakeResponse(200, "<html><title>Sign in to JetAI</title></html>")
         ],
+        **{
+            ("https://app.getjetai.com" + path, False): [
+                FakeResponse(302, "", {"Location": "/login?next=" + path})
+            ]
+            for path in (
+                "/documents", "/documents/seller", "/documents/buyer",
+                "/documents/general", "/training", "/launch/matchmaker",
+            )
+        },
         ("https://matchmakerre.com/api/health", True): [
             FakeResponse(200, '{"status":"healthy","database":"connected"}')
         ],

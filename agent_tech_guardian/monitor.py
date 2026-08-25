@@ -100,6 +100,20 @@ class Monitor:
         self._expect_json("jetai", "health", r, lambda p: isinstance(p, dict) and p.get("status") == "healthy")
         r = self._get("jetai", "login", "https://app.getjetai.com/login")
         self._expect_title("jetai", "login", r, "Sign in to JetAI")
+        for path in (
+            "/documents",
+            "/documents/seller",
+            "/documents/buyer",
+            "/documents/general",
+            "/training",
+            "/launch/matchmaker",
+        ):
+            r = self._get("jetai", "protected_route", "https://app.getjetai.com" + path, follow_redirects=False)
+            if r.status != 302 or _headers(r).get("location") != "/login?next=" + path:
+                raise ProbeFailure(
+                    "jetai", "protected_route", "unexpected_redirect",
+                    _safe_diagnostic("unexpected_redirect"),
+                )
 
     def _probe_matchmaker(self) -> None:
         r = self._get("matchmaker", "health", "https://matchmakerre.com/api/health")

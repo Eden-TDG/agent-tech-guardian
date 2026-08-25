@@ -21,7 +21,7 @@ def test_all_seven_system_journeys_are_operational(all_healthy_script):
     assert set(report["systems"]) == {"jetai", "ask_jet", "jet_broker", "matchmaker", "jet_center", "renee_todo", "offers_out"}
     assert {entry["state"] for entry in report["systems"].values()} == {"operational"}
     assert report["checked_at"] == "2026-08-20T12:00:00Z"
-    assert len(transport.calls) == 11
+    assert len(transport.calls) == 17
     assert notifier.events == []
     assert len(state.saves) == 1
     json.dumps(state.value)
@@ -225,6 +225,18 @@ def test_matchmaker_login_redirect_is_not_followed_and_location_is_exact(all_hea
     assert system(report, "matchmaker")["reason"] == "unexpected_redirect"
     assert ("GET", "https://matchmakerre.com/login", False) in transport.calls
     assert ("GET", "https://app.getjetai.com/launch/matchmaker", True) not in transport.calls
+
+
+def test_jetai_protected_product_route_must_exist_and_preserve_destination(all_healthy_script):
+    script = copy.deepcopy(all_healthy_script)
+    key = ("https://app.getjetai.com/training", False)
+    script[key] = [FakeResponse(302, "", {"Location": "/login"})]
+
+    report, transport, _, _ = run_monitor(script)
+
+    assert system(report, "jetai")["stage"] == "protected_route"
+    assert system(report, "jetai")["reason"] == "unexpected_redirect"
+    assert ("GET", key[0], False) in transport.calls
 
 
 @pytest.mark.parametrize("transient", [502, 503, 504])

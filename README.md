@@ -6,7 +6,7 @@ Guardian runs outside the monitored applications and validates real public launc
 
 ## V1 coverage
 
-- JetAI health and sign-in surface
+- JetAI health, sign-in, and protected product-route entry contracts
 - Ask Jet dedicated OAuth-backed model route and exact synthetic completion
 - Jet Broker public app, dedicated OAuth-backed model route, and exact synthetic completion
 - MatchMaker health and JetAI entitlement handoff
