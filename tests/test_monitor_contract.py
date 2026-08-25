@@ -14,14 +14,14 @@ def system(report, name: str):
     return report["systems"][name]
 
 
-def test_all_five_system_journeys_are_operational(all_healthy_script):
+def test_all_six_system_journeys_are_operational(all_healthy_script):
     report, transport, state, notifier = run_monitor(all_healthy_script)
 
     assert report["overall"] == "operational"
-    assert set(report["systems"]) == {"jetai", "matchmaker", "jet_center", "renee_todo", "offers_out"}
+    assert set(report["systems"]) == {"jetai", "jet_broker", "matchmaker", "jet_center", "renee_todo", "offers_out"}
     assert {entry["state"] for entry in report["systems"].values()} == {"operational"}
     assert report["checked_at"] == "2026-08-20T12:00:00Z"
-    assert len(transport.calls) == 9
+    assert len(transport.calls) == 10
     assert notifier.events == []
     assert len(state.saves) == 1
     json.dumps(state.value)
@@ -62,6 +62,7 @@ def test_all_system_failures_make_overall_outage(all_healthy_script):
         ("https://web-production-1adf7.up.railway.app/health", True),
         ("https://ops.reneedelia.com/", True),
         ("https://api.github.com/repos/Eden-TDG/agent-tech-guardian/issues/8", True),
+        ("https://api.github.com/repos/Eden-TDG/agent-tech-guardian/issues/10", True),
     ):
         script[key] = [FakeResponse(500, "failed")]
 
@@ -69,6 +70,46 @@ def test_all_system_failures_make_overall_outage(all_healthy_script):
 
     assert report["overall"] == "outage"
     assert {entry["state"] for entry in report["systems"].values()} == {"outage"}
+
+
+def test_jet_broker_failed_completion_heartbeat_is_an_outage(all_healthy_script):
+    script = copy.deepcopy(all_healthy_script)
+    url = "https://api.github.com/repos/Eden-TDG/agent-tech-guardian/issues/10"
+    payload = {
+        "schema_version": 1,
+        "producer_id": "jet-broker-mac-synthetic",
+        "observed_at": "2026-08-20T11:58:00Z",
+        "app_healthy": True,
+        "gateway_healthy": True,
+        "model_advertised": True,
+        "completion_ok": False,
+    }
+    script[(url, True)] = [FakeResponse(200, json.dumps({"body": json.dumps(payload)}))]
+
+    report, _, _, _ = run_monitor(script)
+
+    assert system(report, "jet_broker")["state"] == "outage"
+    assert system(report, "jet_broker")["stage"] == "synthetic_heartbeat"
+    assert system(report, "jet_broker")["reason"] == "completion_failed"
+
+
+def test_jet_broker_stale_heartbeat_is_an_outage(all_healthy_script):
+    script = copy.deepcopy(all_healthy_script)
+    url = "https://api.github.com/repos/Eden-TDG/agent-tech-guardian/issues/10"
+    payload = {
+        "schema_version": 1,
+        "producer_id": "jet-broker-mac-synthetic",
+        "observed_at": "2026-08-20T11:30:00Z",
+        "app_healthy": True,
+        "gateway_healthy": True,
+        "model_advertised": True,
+        "completion_ok": True,
+    }
+    script[(url, True)] = [FakeResponse(200, json.dumps({"body": json.dumps(payload)}))]
+
+    report, _, _, _ = run_monitor(script)
+
+    assert system(report, "jet_broker")["reason"] == "heartbeat_stale"
 
 
 def test_offers_out_stale_heartbeat_has_stable_sanitized_alert_signature(all_healthy_script):

@@ -12,6 +12,8 @@ TRANSIENT_STATUSES = {502, 503, 504}
 EXPECTED_MATCHMAKER_REDIRECT = "https://app.getjetai.com/launch/matchmaker"
 OFFERS_OUT_HEARTBEAT_URL = "https://api.github.com/repos/Eden-TDG/agent-tech-guardian/issues/8"
 OFFERS_OUT_HEARTBEAT_MAX_AGE_SECONDS = 15 * 60
+JET_BROKER_HEARTBEAT_URL = "https://api.github.com/repos/Eden-TDG/agent-tech-guardian/issues/10"
+JET_BROKER_HEARTBEAT_MAX_AGE_SECONDS = 15 * 60
 
 
 @dataclass(frozen=True)
@@ -104,6 +106,57 @@ class Monitor:
         if r.status != 302 or _headers(r).get("location") != EXPECTED_MATCHMAKER_REDIRECT:
             raise ProbeFailure("matchmaker", "login", "unexpected_redirect", _safe_diagnostic("unexpected_redirect"))
 
+    def _probe_jet_broker(self) -> None:
+        response = self._get("jet_broker", "synthetic_heartbeat", JET_BROKER_HEARTBEAT_URL)
+        self._expect_status("jet_broker", "synthetic_heartbeat", response)
+        try:
+            issue = response.json()
+            payload = json.loads(issue["body"])
+            observed_at = datetime.fromisoformat(
+                str(payload["observed_at"]).replace("Z", "+00:00")
+            ).astimezone(timezone.utc)
+            valid = (
+                set(payload) == {
+                    "schema_version", "producer_id", "observed_at",
+                    "app_healthy", "gateway_healthy", "model_advertised",
+                    "completion_ok",
+                }
+                and payload["schema_version"] == 1
+                and payload["producer_id"] == "jet-broker-mac-synthetic"
+                and all(
+                    isinstance(payload[field], bool)
+                    for field in (
+                        "app_healthy", "gateway_healthy", "model_advertised",
+                        "completion_ok",
+                    )
+                )
+            )
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+            valid = False
+            observed_at = None
+        if not valid or observed_at is None:
+            raise ProbeFailure(
+                "jet_broker", "synthetic_heartbeat", "unexpected_payload",
+                _safe_diagnostic("unexpected_payload"),
+            )
+        age_seconds = (self.clock.now().astimezone(timezone.utc) - observed_at).total_seconds()
+        if age_seconds < 0 or age_seconds > JET_BROKER_HEARTBEAT_MAX_AGE_SECONDS:
+            raise ProbeFailure(
+                "jet_broker", "synthetic_heartbeat", "heartbeat_stale",
+                "sanitized Jet Broker synthetic heartbeat is stale",
+            )
+        for field, reason in (
+            ("app_healthy", "app_unhealthy"),
+            ("gateway_healthy", "gateway_unhealthy"),
+            ("model_advertised", "model_route_missing"),
+            ("completion_ok", "completion_failed"),
+        ):
+            if not payload[field]:
+                raise ProbeFailure(
+                    "jet_broker", "synthetic_heartbeat", reason,
+                    "Jet Broker synthetic journey did not complete",
+                )
+
     def _probe_jet_center(self) -> None:
         base = "https://web-production-1adf7.up.railway.app"
         r = self._get("jet_center", "health", base + "/health")
@@ -167,6 +220,7 @@ class Monitor:
         incidents = previous.get("incidents", {}) if isinstance(previous.get("incidents", {}), dict) else {}
         definitions = (
             ("jetai", "JetAI", self._probe_jetai),
+            ("jet_broker", "Jet Broker", self._probe_jet_broker),
             ("matchmaker", "MatchMaker", self._probe_matchmaker),
             ("jet_center", "Jet Center", self._probe_jet_center),
             ("renee_todo", "Renee TO-DO", self._probe_renee_todo),
