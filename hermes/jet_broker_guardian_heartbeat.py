@@ -13,8 +13,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 SCRIPTS_DIR = Path.home() / ".hermes" / "scripts"
-sys.path.insert(0, str(SCRIPTS_DIR))
-from vault_cache_reader import read_credential  # noqa: E402
 
 GUARDIAN_REPOSITORY = "Eden-TDG/agent-tech-guardian"
 GUARDIAN_ISSUE = "10"
@@ -128,6 +126,9 @@ def publish(payload: dict, *, runner=subprocess.run) -> None:
 
 
 def main() -> int:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+    from vault_cache_reader import read_credential
+
     token = read_credential("__direct__", "", "JETBROKER_API_SERVER_KEY") or ""
     publish(build_payload(token))
     return 0
