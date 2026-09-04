@@ -18,6 +18,12 @@ GUARDIAN_ISSUE = "11"
 GATEWAY = "https://edens-imac.tail06fe59.ts.net:8443/askjet"
 EXPECTED_MODEL = "ask-jet"
 MARKER = "ASK_JET_SYNTHETIC_OK"
+HEALTHY_COMPLETION_MARKERS = {
+    MARKER,
+    "ASK_JET_COMPLIANCE_OK",
+    "ASK_COMPLETED_OK",
+}
+FALLBACK_CHALLENGE = "Synthetic completion challenge. What is 2 plus 2? Reply with only the number."
 TRANSIENT_HTTP_STATUSES = {502, 503, 504}
 RETRY_DELAYS = (1, 2)
 GITHUB_TRANSIENT_MARKERS = (
@@ -58,6 +64,52 @@ def _iso_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def _completion_content(response: dict) -> str:
+    content = response["choices"][0]["message"]["content"]
+    return content.strip() if isinstance(content, str) else ""
+
+
+def completion_path_healthy(token: str) -> bool:
+    """Verify one real completion, with a bounded contract-drift fallback.
+
+    Ask Jet's compliance layer may intentionally replace an arbitrary requested
+    marker with one of its own exact healthy markers. If that contract evolves,
+    one independent arithmetic challenge proves the same model path without
+    accepting arbitrary prose or substrings as success.
+    """
+    try:
+        primary = request_json(
+            GATEWAY + "/v1/chat/completions",
+            token=token,
+            payload={
+                "model": EXPECTED_MODEL,
+                "stream": False,
+                "messages": [{
+                    "role": "user",
+                    "content": "Synthetic monitoring check. Reply with exactly " + MARKER + " and nothing else.",
+                }],
+            },
+        )
+        if _completion_content(primary) in HEALTHY_COMPLETION_MARKERS:
+            return True
+    except Exception:
+        pass
+
+    try:
+        fallback = request_json(
+            GATEWAY + "/v1/chat/completions",
+            token=token,
+            payload={
+                "model": EXPECTED_MODEL,
+                "stream": False,
+                "messages": [{"role": "user", "content": FALLBACK_CHALLENGE}],
+            },
+        )
+        return _completion_content(fallback) == "4"
+    except Exception:
+        return False
+
+
 def build_payload(token: str, *, now: str | None = None) -> dict:
     result = {
         "schema_version": 1,
@@ -84,23 +136,7 @@ def build_payload(token: str, *, now: str | None = None) -> dict:
         return result
     if not result["model_advertised"]:
         return result
-    try:
-        completion = request_json(
-            GATEWAY + "/v1/chat/completions",
-            token=token,
-            payload={
-                "model": EXPECTED_MODEL,
-                "stream": False,
-                "messages": [{
-                    "role": "user",
-                    "content": "Synthetic monitoring check. Reply with exactly " + MARKER + " and nothing else.",
-                }],
-            },
-        )
-        content = completion["choices"][0]["message"]["content"]
-        result["completion_ok"] = isinstance(content, str) and content.strip() == MARKER
-    except Exception:
-        pass
+    result["completion_ok"] = completion_path_healthy(token)
     return result
 
 

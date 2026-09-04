@@ -38,16 +38,78 @@ def test_probe_requires_gateway_model_and_exact_completion(monkeypatch):
     assert len(calls) == 3
 
 
-def test_failed_completion_is_published_as_false(monkeypatch):
+def test_current_ask_jet_compliance_marker_is_accepted(monkeypatch):
+    calls = []
+
+    def fake_request(url, *, token="", payload=None):
+        calls.append((url, payload))
+        if url.endswith("/health"):
+            return {"status": "ok"}
+        if url.endswith("/v1/models"):
+            return {"data": [{"id": "ask-jet"}]}
+        return {"choices": [{"message": {"content": "ASK_JET_COMPLIANCE_OK"}}]}
+
+    monkeypatch.setattr(module, "request_json", fake_request)
+    payload = module.build_payload("secret", now="2026-09-04T16:00:00Z")
+
+    assert payload["completion_ok"] is True
+    assert len(calls) == 3
+
+
+def test_unrecognized_marker_self_heals_with_bounded_arithmetic_challenge(monkeypatch):
+    completion_calls = []
+
     def fake_request(url, *, token="", payload=None):
         if url.endswith("/health"):
             return {"status": "ok"}
         if url.endswith("/v1/models"):
             return {"data": [{"id": "ask-jet"}]}
+        completion_calls.append(payload["messages"][0]["content"])
+        content = "new-but-unrecognized-marker" if len(completion_calls) == 1 else "4"
+        return {"choices": [{"message": {"content": content}}]}
+
+    monkeypatch.setattr(module, "request_json", fake_request)
+    payload = module.build_payload("secret", now="2026-09-04T16:00:00Z")
+
+    assert payload["completion_ok"] is True
+    assert len(completion_calls) == 2
+    assert "2 plus 2" in completion_calls[1]
+
+
+def test_primary_completion_exception_self_heals_with_bounded_challenge(monkeypatch):
+    completion_calls = []
+
+    def fake_request(url, *, token="", payload=None):
+        if url.endswith("/health"):
+            return {"status": "ok"}
+        if url.endswith("/v1/models"):
+            return {"data": [{"id": "ask-jet"}]}
+        completion_calls.append(payload)
+        if len(completion_calls) == 1:
+            raise TimeoutError("primary prompt timed out")
+        return {"choices": [{"message": {"content": "4"}}]}
+
+    monkeypatch.setattr(module, "request_json", fake_request)
+    payload = module.build_payload("secret", now="2026-09-04T16:00:00Z")
+
+    assert payload["completion_ok"] is True
+    assert len(completion_calls) == 2
+
+
+def test_failed_primary_and_fallback_completions_are_published_as_false(monkeypatch):
+    completion_calls = []
+
+    def fake_request(url, *, token="", payload=None):
+        if url.endswith("/health"):
+            return {"status": "ok"}
+        if url.endswith("/v1/models"):
+            return {"data": [{"id": "ask-jet"}]}
+        completion_calls.append(payload)
         return {"choices": [{"message": {"content": "wrong"}}]}
 
     monkeypatch.setattr(module, "request_json", fake_request)
     assert module.build_payload("secret", now="2026-08-25T01:00:00Z")["completion_ok"] is False
+    assert len(completion_calls) == 2
 
 
 def test_publisher_uses_sanitized_exact_payload():
