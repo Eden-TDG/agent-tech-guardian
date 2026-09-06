@@ -1,0 +1,62 @@
+{
+  "checked_at": "2026-09-06T22:27:08Z",
+  "overall": "degraded",
+  "systems": {
+    "ask_jet": {
+      "diagnostic": "",
+      "display_name": "Ask Jet",
+      "last_successful_journey": "2026-09-06T22:27:08Z",
+      "reason": null,
+      "stage": null,
+      "state": "operational"
+    },
+    "jet_broker": {
+      "diagnostic": "",
+      "display_name": "Jet Broker",
+      "last_successful_journey": "2026-09-06T22:27:08Z",
+      "reason": null,
+      "stage": null,
+      "state": "operational"
+    },
+    "jet_center": {
+      "diagnostic": "",
+      "display_name": "Jet Center",
+      "last_successful_journey": "2026-09-06T22:27:08Z",
+      "reason": null,
+      "stage": null,
+      "state": "operational"
+    },
+    "jetai": {
+      "diagnostic": "",
+      "display_name": "JetAI",
+      "last_successful_journey": "2026-09-06T22:27:08Z",
+      "reason": null,
+      "stage": null,
+      "state": "operational"
+    },
+    "matchmaker": {
+      "diagnostic": "",
+      "display_name": "MatchMaker",
+      "last_successful_journey": "2026-09-06T22:27:08Z",
+      "reason": null,
+      "stage": null,
+      "state": "operational"
+    },
+    "offers_out": {
+      "diagnostic": "",
+      "display_name": "Offers Out",
+      "last_successful_journey": "2026-09-06T22:27:08Z",
+      "reason": null,
+      "stage": null,
+      "state": "operational"
+    },
+    "renee_todo": {
+      "diagnostic": "page title did not match the UI contract",
+      "display_name": "Renee TO-DO",
+      "last_successful_journey": "2026-08-26T19:09:10Z",
+      "reason": "unexpected_title",
+      "stage": "homepage",
+      "state": "outage"
+    }
+  }
+}
