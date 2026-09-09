@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import socket
 import subprocess
 import sys
@@ -22,6 +23,12 @@ EXPECTED_MODEL = "brokercompliance"
 MARKER = "JET_BROKER_SYNTHETIC_OK"
 TRANSIENT_HTTP_STATUSES = {502, 503, 504}
 RETRY_DELAYS = (1, 2)
+GITHUB_TRANSIENT_MARKERS = (
+    "502", "503", "504", "bad gateway", "service unavailable",
+    "gateway timeout", "connection reset", "connection refused",
+    "connection timed out", "context deadline exceeded", "eof",
+    "network is unreachable", "temporary failure", "tls handshake timeout",
+)
 
 
 def request_json(url: str, *, token: str = "", payload: dict | None = None):
@@ -112,17 +119,62 @@ def build_payload(token: str, *, now: str | None = None) -> dict:
     return result
 
 
-def publish(payload: dict, *, runner=subprocess.run) -> None:
-    runner(
-        [
-            "gh", "issue", "edit", GUARDIAN_ISSUE,
-            "--repo", GUARDIAN_REPOSITORY,
-            "--body", json.dumps(payload, sort_keys=True, separators=(",", ":")),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
+def _bounded_detail(text: str) -> str:
+    detail = " ".join((text or "unknown failure").split())
+    detail = re.sub(r"(?i)\bBearer\s+\S+", "Bearer [REDACTED]", detail)
+    detail = re.sub(
+        r"(?i)\b(token|api[_-]?key|password|secret)\s*[:=]\s*\S+",
+        lambda match: f"{match.group(1)}=[REDACTED]",
+        detail,
     )
+    return detail[:240]
+
+
+def _github_failure_is_transient(detail: str) -> bool:
+    lowered = detail.lower()
+    return any(marker in lowered for marker in GITHUB_TRANSIENT_MARKERS)
+
+
+def publish(
+    payload: dict,
+    *,
+    runner=subprocess.run,
+    sleeper=time.sleep,
+    retry_delays=RETRY_DELAYS,
+) -> None:
+    command = [
+        "gh", "issue", "edit", GUARDIAN_ISSUE,
+        "--repo", GUARDIAN_REPOSITORY,
+        "--body", json.dumps(payload, sort_keys=True, separators=(",", ":")),
+    ]
+    attempts = len(retry_delays) + 1
+    for attempt in range(attempts):
+        try:
+            completed = runner(
+                command,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=45,
+            )
+        except subprocess.TimeoutExpired as exc:
+            detail = _bounded_detail(f"gh command timed out after {exc.timeout} seconds")
+            if attempt == attempts - 1:
+                raise RuntimeError(
+                    f"github_publish_failed after {attempt + 1} attempts: {detail}"
+                ) from exc
+            sleeper(retry_delays[attempt])
+            continue
+        if completed.returncode == 0:
+            return
+        detail = _bounded_detail(completed.stderr or completed.stdout)
+        transient = _github_failure_is_transient(detail)
+        if not transient or attempt == attempts - 1:
+            raise RuntimeError(
+                f"github_publish_failed after {attempt + 1} attempts: {detail}"
+            )
+        sleeper(retry_delays[attempt])
+    raise AssertionError("unreachable GitHub publish retry state")
 
 
 def main() -> int:
@@ -134,5 +186,16 @@ def main() -> int:
     return 0
 
 
+def run_cli() -> int:
+    try:
+        return main()
+    except Exception as exc:
+        print(
+            f"jet_broker_heartbeat_failed: {type(exc).__name__}: {_bounded_detail(str(exc))}",
+            file=sys.stderr,
+        )
+        return 1
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(run_cli())
