@@ -72,13 +72,15 @@ def fetch_guardian_state(
         except urllib.error.HTTPError as exc:
             if exc.code == 403 and str(exc.headers.get("X-RateLimit-Remaining") or "") == "0":
                 return fetch_guardian_state_authenticated(runner=authenticated_runner)
-            if attempt == 0 and exc.code in {502, 503, 504}:
-                continue
+            if exc.code in {502, 503, 504}:
+                if attempt == 0:
+                    continue
+                return fetch_guardian_state_authenticated(runner=authenticated_runner)
             raise
         except (TimeoutError, urllib.error.URLError):
             if attempt == 0:
                 continue
-            raise
+            return fetch_guardian_state_authenticated(runner=authenticated_runner)
     assert issue is not None
     return _parse_issue_state(issue)
 
@@ -157,9 +159,11 @@ def run_once(
     was_unhealthy = bool(previous.get("unhealthy"))
     repair_attempted_checked_at = str(previous.get("repair_attempted_checked_at") or "")
     if unhealthy_reason == "stale" and repair_attempted_checked_at != checked_at:
-        repair_attempted_checked_at = checked_at
         try:
             repaired = repair(checked_at, fetch)
+            # Deduplicate only after the repair path completed. If dispatch or
+            # polling raised, leave this clear so the next cron tick retries.
+            repair_attempted_checked_at = checked_at
             if repaired is not None:
                 repaired_checked_at = str(repaired["checked_at"])
                 repaired_age = (now - parse_utc(repaired_checked_at)).total_seconds()
@@ -170,7 +174,9 @@ def run_once(
         except Exception:
             # Preserve the original stale classification. The alert remains
             # sanitized; command output and credentials are never printed.
-            pass
+            # Do not persist a false successful-attempt marker: a transient
+            # GitHub dispatch failure must be retried on the next cron tick.
+            repair_attempted_checked_at = ""
     is_unhealthy = bool(unhealthy_reason)
     if is_unhealthy and not was_unhealthy:
         if unhealthy_reason == "stale":

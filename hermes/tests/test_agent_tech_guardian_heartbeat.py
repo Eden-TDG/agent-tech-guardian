@@ -40,6 +40,30 @@ def test_stale_heartbeat_alerts_once_then_deduplicates(tmp_path, capsys):
     assert len(recoveries) == 1
 
 
+def test_failed_repair_is_retried_next_run_without_duplicate_alert(tmp_path, capsys):
+    now = datetime(2026, 8, 20, 15, 0, tzinfo=timezone.utc)
+    path = tmp_path / "state.json"
+    stale = lambda: state(now - timedelta(minutes=20))
+    attempts = []
+
+    def broken_repair(checked_at, _fetch):
+        attempts.append(checked_at)
+        raise subprocess.CalledProcessError(1, ["gh", "workflow", "run"])
+
+    module.run_once(now=now, state_path=path, fetch=stale, repair=broken_repair)
+    assert "Agent Tech Guardian heartbeat is stale" in capsys.readouterr().out
+    assert json.loads(path.read_text())["repair_attempted_checked_at"] == ""
+
+    module.run_once(
+        now=now + timedelta(minutes=5),
+        state_path=path,
+        fetch=stale,
+        repair=broken_repair,
+    )
+    assert capsys.readouterr().out == ""
+    assert attempts == [stale()["checked_at"], stale()["checked_at"]]
+
+
 def test_recovery_message_emits_once(tmp_path, capsys):
     now = datetime(2026, 8, 20, 15, 0, tzinfo=timezone.utc)
     path = tmp_path / "state.json"
@@ -215,6 +239,44 @@ def test_guardian_state_fetch_uses_authenticated_fallback_only_when_public_quota
         "gh", "api", "repos/Eden-TDG/agent-tech-guardian/issues/1",
     ]
     assert calls[1][2]["check"] is True
+
+
+def test_guardian_state_fetch_falls_back_after_public_transport_retries_are_exhausted():
+    calls = []
+    expected = state(datetime(2026, 8, 20, tzinfo=timezone.utc))
+
+    def open_url(_request, timeout):
+        calls.append(("public", timeout))
+        raise urllib.error.URLError("temporary network failure")
+
+    def runner(command, **kwargs):
+        calls.append(("authenticated", command, kwargs))
+        return subprocess.CompletedProcess(command, 0, json.dumps({"body": json.dumps(expected)}), "")
+
+    result = module.fetch_guardian_state(open_url=open_url, authenticated_runner=runner)
+
+    assert result == expected
+    assert calls[:2] == [("public", 20), ("public", 20)]
+    assert calls[2][0] == "authenticated"
+
+
+def test_guardian_state_fetch_falls_back_after_public_transient_http_retries_are_exhausted():
+    calls = []
+    expected = state(datetime(2026, 8, 20, tzinfo=timezone.utc))
+
+    def open_url(request, timeout):
+        calls.append(("public", timeout))
+        raise urllib.error.HTTPError(request.full_url, 503, "unavailable", Message(), None)
+
+    def runner(command, **kwargs):
+        calls.append(("authenticated", command, kwargs))
+        return subprocess.CompletedProcess(command, 0, json.dumps({"body": json.dumps(expected)}), "")
+
+    result = module.fetch_guardian_state(open_url=open_url, authenticated_runner=runner)
+
+    assert result == expected
+    assert calls[:2] == [("public", 20), ("public", 20)]
+    assert calls[2][0] == "authenticated"
 
 
 def test_guardian_state_fetch_does_not_fallback_on_permission_403():
