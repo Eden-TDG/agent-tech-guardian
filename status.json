@@ -1,0 +1,62 @@
+{
+  "checked_at": "2026-09-15T23:04:02Z",
+  "overall": "degraded",
+  "systems": {
+    "ask_jet": {
+      "diagnostic": "unexpected HTTP status: 403",
+      "display_name": "Ask Jet",
+      "last_successful_journey": "2026-09-15T22:46:59Z",
+      "reason": "unexpected_http_status",
+      "stage": "synthetic_heartbeat",
+      "state": "outage"
+    },
+    "jet_broker": {
+      "diagnostic": "unexpected HTTP status: 403",
+      "display_name": "Jet Broker",
+      "last_successful_journey": "2026-09-15T22:46:59Z",
+      "reason": "unexpected_http_status",
+      "stage": "synthetic_heartbeat",
+      "state": "outage"
+    },
+    "jet_center": {
+      "diagnostic": "",
+      "display_name": "Jet Center",
+      "last_successful_journey": "2026-09-15T23:04:02Z",
+      "reason": null,
+      "stage": null,
+      "state": "operational"
+    },
+    "jetai": {
+      "diagnostic": "",
+      "display_name": "JetAI",
+      "last_successful_journey": "2026-09-15T23:04:02Z",
+      "reason": null,
+      "stage": null,
+      "state": "operational"
+    },
+    "matchmaker": {
+      "diagnostic": "",
+      "display_name": "MatchMaker",
+      "last_successful_journey": "2026-09-15T23:04:02Z",
+      "reason": null,
+      "stage": null,
+      "state": "operational"
+    },
+    "offers_out": {
+      "diagnostic": "unexpected HTTP status: 403",
+      "display_name": "Offers Out",
+      "last_successful_journey": "2026-09-15T22:46:59Z",
+      "reason": "unexpected_http_status",
+      "stage": "mac_heartbeat",
+      "state": "outage"
+    },
+    "renee_todo": {
+      "diagnostic": "page title did not match the UI contract",
+      "display_name": "Renee TO-DO",
+      "last_successful_journey": "2026-08-26T19:09:10Z",
+      "reason": "unexpected_title",
+      "stage": "homepage",
+      "state": "outage"
+    }
+  }
+}
