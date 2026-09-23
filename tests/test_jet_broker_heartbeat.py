@@ -96,6 +96,23 @@ def test_publish_retries_transient_github_failure_then_recovers():
     assert sleeps == [1]
 
 
+def test_publish_retries_github_graphql_internal_error_then_recovers():
+    calls = []
+    sleeps = []
+    outcomes = iter([
+        result(1, 'failed to update https://github.com/Eden-TDG/agent-tech-guardian/issues/10: GraphQL: Something went wrong while executing your query on 2026-09-23T07:56:14Z. Please include `6A41:829A5:334E058:A9E8762`'),
+        result(0),
+    ])
+
+    def runner(command, **kwargs):
+        calls.append(command)
+        return next(outcomes)
+
+    module.publish({}, runner=runner, sleeper=sleeps.append, retry_delays=(1, 2))
+    assert len(calls) == 2
+    assert sleeps == [1]
+
+
 def test_publish_retries_subprocess_timeout_then_recovers():
     calls = []
     sleeps = []

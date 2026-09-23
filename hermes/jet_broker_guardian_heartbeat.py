@@ -28,6 +28,7 @@ GITHUB_TRANSIENT_MARKERS = (
     "gateway timeout", "connection reset", "connection refused",
     "connection timed out", "context deadline exceeded", "eof",
     "network is unreachable", "temporary failure", "tls handshake timeout",
+    "graphql: something went wrong while executing your query",
 )
 
 
