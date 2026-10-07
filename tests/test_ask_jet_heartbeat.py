@@ -128,8 +128,8 @@ def test_publisher_uses_sanitized_exact_payload():
 
     module.publish(payload, runner=lambda *a, **k: calls.append((a, k)) or Result())
     command = calls[0][0][0]
-    assert command[:6] == ["gh", "issue", "edit", module.GUARDIAN_ISSUE, "--repo", module.GUARDIAN_REPOSITORY]
-    assert json.loads(command[-1]) == payload
+    assert command[:6] == ["gh", "api", "--method", "PATCH", "--silent", f"repos/{module.GUARDIAN_REPOSITORY}/issues/{module.GUARDIAN_ISSUE}"]
+    assert json.loads(command[-1].removeprefix("body=")) == payload
 
 
 def result(returncode: int, stderr: str = ""):

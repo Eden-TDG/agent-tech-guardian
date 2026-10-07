@@ -144,9 +144,9 @@ def publish(
     retry_delays=RETRY_DELAYS,
 ) -> None:
     command = [
-        "gh", "issue", "edit", GUARDIAN_ISSUE,
-        "--repo", GUARDIAN_REPOSITORY,
-        "--body", json.dumps(payload, sort_keys=True, separators=(",", ":")),
+        "gh", "api", "--method", "PATCH", "--silent",
+        f"repos/{GUARDIAN_REPOSITORY}/issues/{GUARDIAN_ISSUE}",
+        "--field", "body=" + json.dumps(payload, sort_keys=True, separators=(",", ":")),
     ]
     attempts = len(retry_delays) + 1
     for attempt in range(attempts):
