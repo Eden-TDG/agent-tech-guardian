@@ -125,11 +125,17 @@ def all_healthy_script() -> dict[tuple[str, bool], list[FakeResponse]]:
         ("https://web-production-1adf7.up.railway.app/login", True): [
             FakeResponse(200, "<html><title>Sign In — Jet Center</title></html>")
         ],
-        ("https://ops.reneedelia.com/", True): [
-            FakeResponse(200, "<html><title>Renee's Command Center</title></html>")
+        ("https://ops.reneedelia.com/", False): [
+            FakeResponse(302, "", {"Location": "/login"})
         ],
-        ("https://ops.reneedelia.com/api/data", True): [
-            FakeResponse(200, '{"todo":[]}')
+        ("https://ops.reneedelia.com/login", True): [
+            FakeResponse(200, "<html><title>Renee Personal Command Center Login</title></html>")
+        ],
+        ("https://ops.reneedelia.com/health", True): [
+            FakeResponse(200, '{"ok":true,"service":"personal-command-center"}')
+        ],
+        ("https://ops.reneedelia.com/api/data", False): [
+            FakeResponse(401, '{"error":"authentication required"}')
         ],
         ("https://api.github.com/repos/Eden-TDG/agent-tech-guardian/issues/8", True): [
             FakeResponse(200, json.dumps({"body": json.dumps({

@@ -229,10 +229,21 @@ class Monitor:
 
     def _probe_renee_todo(self) -> None:
         base = "https://ops.reneedelia.com"
-        r = self._get("renee_todo", "homepage", base + "/")
-        self._expect_title("renee_todo", "homepage", r, "Renee's Command Center")
-        r = self._get("renee_todo", "api_data", base + "/api/data")
-        self._expect_json("renee_todo", "api_data", r, lambda p: isinstance(p, dict))
+        r = self._get("renee_todo", "homepage", base + "/", follow_redirects=False)
+        if r.status != 302 or _headers(r).get("location") != "/login":
+            raise ProbeFailure("renee_todo", "homepage", "unexpected_redirect", _safe_diagnostic("unexpected_redirect"))
+        r = self._get("renee_todo", "login", base + "/login")
+        self._expect_title("renee_todo", "login", r, "Renee Personal Command Center Login")
+        r = self._get("renee_todo", "health", base + "/health")
+        self._expect_json("renee_todo", "health", r, lambda p: isinstance(p, dict) and p.get("ok") is True and p.get("service") == "personal-command-center")
+        r = self._get("renee_todo", "api_data", base + "/api/data", follow_redirects=False)
+        self._expect_status("renee_todo", "api_data", r, 401)
+        try:
+            payload = r.json()
+        except Exception:
+            raise ProbeFailure("renee_todo", "api_data", "invalid_json", _safe_diagnostic("invalid_json"))
+        if not isinstance(payload, dict) or payload.get("error") != "authentication required":
+            raise ProbeFailure("renee_todo", "api_data", "unexpected_payload", _safe_diagnostic("unexpected_payload"))
 
     def _probe_offers_out(self) -> None:
         response = self._get("offers_out", "mac_heartbeat", OFFERS_OUT_HEARTBEAT_URL)

@@ -21,7 +21,7 @@ def test_all_seven_system_journeys_are_operational(all_healthy_script):
     assert set(report["systems"]) == {"jetai", "ask_jet", "jet_broker", "matchmaker", "jet_center", "renee_todo", "offers_out"}
     assert {entry["state"] for entry in report["systems"].values()} == {"operational"}
     assert report["checked_at"] == "2026-08-20T12:00:00Z"
-    assert len(transport.calls) == 17
+    assert len(transport.calls) == 19
     assert notifier.events == []
     assert len(state.saves) == 1
     json.dumps(state.value)
@@ -35,8 +35,10 @@ def test_all_seven_system_journeys_are_operational(all_healthy_script):
         ("matchmaker", "https://matchmakerre.com/api/health", True, FakeResponse(200, '{"status":"healthy","database":"offline"}'), "health", "unexpected_payload"),
         ("jet_center", "https://web-production-1adf7.up.railway.app/health", True, FakeResponse(200, '{"status":"healthy"}'), "health", "unexpected_payload"),
         ("jet_center", "https://web-production-1adf7.up.railway.app/login", True, FakeResponse(200, "<title>Sign In - Jet Center</title>"), "login", "unexpected_title"),
-        ("renee_todo", "https://ops.reneedelia.com/", True, FakeResponse(200, "<title>Other</title>"), "homepage", "unexpected_title"),
-        ("renee_todo", "https://ops.reneedelia.com/api/data", True, FakeResponse(200, "[]"), "api_data", "unexpected_payload"),
+        ("renee_todo", "https://ops.reneedelia.com/", False, FakeResponse(200, "<title>Other</title>"), "homepage", "unexpected_redirect"),
+        ("renee_todo", "https://ops.reneedelia.com/login", True, FakeResponse(200, "<title>Other</title>"), "login", "unexpected_title"),
+        ("renee_todo", "https://ops.reneedelia.com/health", True, FakeResponse(200, '{"ok":false,"service":"personal-command-center"}'), "health", "unexpected_payload"),
+        ("renee_todo", "https://ops.reneedelia.com/api/data", False, FakeResponse(200, "{}"), "api_data", "unexpected_http_status"),
     ],
 )
 def test_contract_mismatch_has_stable_classification(
@@ -60,7 +62,7 @@ def test_all_system_failures_make_overall_outage(all_healthy_script):
         ("https://app.getjetai.com/health", True),
         ("https://matchmakerre.com/api/health", True),
         ("https://web-production-1adf7.up.railway.app/health", True),
-        ("https://ops.reneedelia.com/", True),
+        ("https://ops.reneedelia.com/", False),
         ("https://api.github.com/repos/Eden-TDG/agent-tech-guardian/issues/8", True),
         ("https://api.github.com/repos/Eden-TDG/agent-tech-guardian/issues/10", True),
         ("https://api.github.com/repos/Eden-TDG/agent-tech-guardian/issues/11", True),

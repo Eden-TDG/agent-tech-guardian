@@ -40,8 +40,10 @@ Hermes Ops monitors scheduled jobs, APIs, queues, delivery, and local infrastruc
    - `GET https://web-production-1adf7.up.railway.app/health` → HTTP 200 JSON `status=ok`.
    - `GET https://web-production-1adf7.up.railway.app/login` → HTTP 200 and title `Sign In — Jet Center`.
 6. **Renee TO-DO**
-   - `GET https://ops.reneedelia.com/` → HTTP 200 and title `Renee's Command Center`.
-   - `GET https://ops.reneedelia.com/api/data` → HTTP 200 and a valid JSON object.
+   - No-follow `GET https://ops.reneedelia.com/` → HTTP 302 with `Location: /login`.
+   - `GET /login` → HTTP 200 with title `Renee Personal Command Center Login`.
+   - `GET /health` → HTTP 200 JSON `ok=true`, `service=personal-command-center`.
+   - Anonymous no-follow `GET /api/data` → HTTP 401 JSON `error=authentication required`; the monitor does not access private board data or prove an authenticated board journey.
 7. **Offers Out**
    - `GET https://api.github.com/repos/Eden-TDG/agent-tech-guardian/issues/8` → HTTP 200.
    - The issue body must be the exact PII-free heartbeat schema for producer
